@@ -178,18 +178,12 @@ export const updateUserLikeAlbums = async () => {
 
 // 更新用户喜欢电台
 export const updateUserLikeDjs = async () => {
-  const dataStore = useDataStore();
-  if (!isLogin() || !dataStore.userData.userId) return;
-  const result = await userDj();
-  dataStore.setUserLikeData("djs", formatCoverList(result.djRadios));
+  await setUserLikeDataLoop(userDj, formatCoverList, "djs");
 };
 
 // 更新用户喜欢MV
 export const updateUserLikeMvs = async () => {
-  const dataStore = useDataStore();
-  if (!isLogin() || !dataStore.userData.userId) return;
-  const result = await userMv();
-  dataStore.setUserLikeData("mvs", formatCoverList(result.data));
+  await setUserLikeDataLoop(userMv, formatCoverList, "mvs");
 };
 
 // 喜欢歌曲
@@ -315,7 +309,7 @@ export const toSubRadio = debounce(
 
 // 循环获取用户喜欢数据
 const setUserLikeDataLoop = async <T>(
-  apiFunction: (limit: number, offset: number) => Promise<{ data: any[]; count: number }>,
+  apiFunction: (limit: number, offset: number) => Promise<any>,
   formatFunction: (data: any[]) => T[],
   key: keyof UserLikeDataType,
 ) => {
@@ -330,16 +324,22 @@ const setUserLikeDataLoop = async <T>(
   let canLoop: boolean = true;
   // 循环获取
   while (canLoop) {
-    const { data, count } = await apiFunction(limit, offset);
+    const result = await apiFunction(limit, offset);
+    let value;
+    // 处理电台响应
+    if (key === "djs") value = result.djRadios;
+    else value = result.data;
     // 数据处理
-    const formattedData = formatFunction(data);
+    const formattedData = formatFunction(value);
     // 若为空
     if (formattedData.length === 0) break;
     // 合并数据
     allData.push(...formattedData);
     // 更新偏移量
     offset += limit;
-    canLoop = offset < count && formattedData.length > 0;
+    // FIXME: DJ的offset不起作用
+    canLoop =
+      (result.count ? offset < result.count && formattedData.length > 0 : true) && result.hasMore;
   }
   // 更新数据
   if (key === "artists") {
